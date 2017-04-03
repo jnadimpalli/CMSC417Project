@@ -3,6 +3,8 @@ require 'socket'
 $port = nil
 $hostname = nil
 
+$server = nil
+
 $nodes = {}
 $index = nil
 
@@ -14,8 +16,8 @@ $pingTimeout = nil
 # --------------------- Part 0 --------------------- # 
 
 def edgeb(cmd)
-	srcIP = cmd[0]
-	dstIP = cmd[1]
+	src_ip = cmd[0]
+	dst_ip = cmd[1]
 
 	dst_name = cmd[2]
 	dst_port = $nodes[dst_name]["PORT"]
@@ -24,14 +26,10 @@ def edgeb(cmd)
 	#update cost
 	$nodes[dst_name]["COST"] = 1
 
-	server = TCPServer.open(port)  
-	loop {                          # Servers run forever
-		Thread.start(server.accept) do |client|
-			client.puts(Time.now.ctime) # Send the time to the client
-			client.puts "Closing the connection. Bye!"
-			client.close                # Disconnect from the client
-		end
-	}
+	dst_socket = TCPSocket.new(dst_ip, dst_port)
+
+	STDOUT.puts "Program entered edgeb method. Method still in developement"
+	
 end
 
 def dumptable(cmd)
@@ -159,29 +157,10 @@ def setup(hostname, port, nodes, config)
 			
 	end	
 
-	$mysocket = TCPSocket.new('localhost', $port)
-
-	th = Thread.new do
-		while true
-			read_array = IO.select([$mysocket])
-			readable = read_array[0]
-			
-			readable.each do |socket|
-				if socket == $mysocket
-					buf = $mysocket.recv_nonblock(1024)
-					STDOUT.puts "Received a message: #{buf}"
-				end
-			end
-		end
-	end
+	
 
 	main()
 
 end
 
 setup(ARGV[0], ARGV[1], ARGV[2], ARGV[3])
-
-
-
-
-
