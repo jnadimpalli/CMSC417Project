@@ -26,7 +26,7 @@ def edgeb(cmd)
 	#update cost
 	$nodes[dst_name]["COST"] = 1
 
-	dst_socket = TCPSocket.new(dst_ip, dst_port)
+	#dst_socket = TCPSocket.new(dst_ip, dst_port)
 
 	STDOUT.puts "Program entered edgeb method. Method still in developement"
 	
