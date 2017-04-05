@@ -15,6 +15,40 @@ $pingTimeout = nil
 
 # --------------------- Part 0 --------------------- # 
 
+def run_server
+	reading = Array.new
+	writing = Array.new
+	sockets = Array.new
+
+	server = TCPServer.open($port)
+	STDOUT.puts "Server #{$hostname} up and running"
+	reading << server
+
+	while true
+		results = select(reading, writing, nil, 0)
+	
+		read = results[0]
+		write = results[1]
+	
+		reads.each do |client|
+	        	if client == server
+	           		STDOUT.puts "Someone connected to server. Adding socket to list."
+		        	client, sockaddr = server.accept
+		        	reading << client
+			elsif client.eof?
+            			STDOUT.puts "Client disconnected"
+		        	reading.delete(client)
+           			client.close
+          		else
+		        	# Perform a blocking-read until new-line is encountered.
+           	 		# We know the client is writing, so as long as it adheres to the
+            			# new-line protocol, we shouldn't block for very long.
+            			STDOUT.puts "Reading..."
+			end
+		end
+	end
+end
+
 def edgeb(cmd)
 	src_ip = cmd[0]
 	dst_ip = cmd[1]
@@ -26,10 +60,16 @@ def edgeb(cmd)
 	#update cost
 	$nodes[dst_name]["COST"] = 1
 
-	#dst_socket = TCPSocket.new(dst_ip, dst_port)
+	STDOUT.puts dst_ip
+	STDOUT.puts dst_port
+	STDOUT.puts "Test"
+	STDOUT.puts src_ip
+	STDOUT.puts $nodes[$hostname]["PORT"]
+	STDOUT.puts $hostname
+
+	dst_socket = TCPSocket.new(dst_ip, $port)
 
 	STDOUT.puts "Program entered edgeb method. Method still in developement"
-	
 end
 
 def dumptable(cmd)
@@ -155,9 +195,11 @@ def setup(hostname, port, nodes, config)
 			$pingTimeout = value.to_i
 		end
 			
-	end	
+	end
 
-	
+	server_thread = Thread.new do
+		run_server()
+	end	
 
 	main()
 
