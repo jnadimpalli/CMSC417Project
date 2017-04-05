@@ -6,7 +6,6 @@ $hostname = nil
 $server = nil
 
 $nodes = {}
-$index = nil
 
 $updateInterval = nil
 $maxPayload = nil
@@ -16,34 +15,36 @@ $pingTimeout = nil
 # --------------------- Part 0 --------------------- # 
 
 def run_server
-	reading = Array.new
-	writing = Array.new
-	sockets = Array.new
-
 	server = TCPServer.open($port)
-	STDOUT.puts "Server #{$hostname} up and running"
-	reading << server
+	reading = [server]
 
 	while true
-		results = select(reading, writing, nil, 0)
+		results = IO.select(reading)
 	
 		read = results[0]
-		write = results[1]
 	
-		reads.each do |client|
-	        	if client == server
-	           		STDOUT.puts "Someone connected to server. Adding socket to list."
-		        	client, sockaddr = server.accept
-		        	reading << client
-			elsif client.eof?
-            			STDOUT.puts "Client disconnected"
-		        	reading.delete(client)
-           			client.close
-          		else
-		        	# Perform a blocking-read until new-line is encountered.
-           	 		# We know the client is writing, so as long as it adheres to the
-            			# new-line protocol, we shouldn't block for very long.
-            			STDOUT.puts "Reading..."
+		read.each do |socket|
+	        	if socket == server
+	           		# A new client is connecting to server
+		        	client, addr_info = server.accept_nonblock
+		        	reading .push(client)
+				
+				message = client.gets("\0")
+				# if there is a message that means we have to create a symmetric connction to the other server
+				if message != nil
+					message = message.chomp
+					node_info = message.split(' ')
+					node_name = node_info[0]
+					node_ip = node_info[1]
+					
+					#update node info
+					$nodes[node_name]["IP"] = node_ip
+					$nodes[node_name]["COST"] = 1				
+	
+					dst_port = $nodes[node_name]["PORT"]
+					dst_socket = TCPSocket.new(node_ip, dst_port)
+				end
+				client.flush
 			end
 		end
 	end
@@ -57,19 +58,15 @@ def edgeb(cmd)
 	dst_port = $nodes[dst_name]["PORT"]
 	
 
-	#update cost
+	#update cost and ip information
 	$nodes[dst_name]["COST"] = 1
+	$nodes[dst_name]["IP"] = dst_ip
 
-	STDOUT.puts dst_ip
-	STDOUT.puts dst_port
-	STDOUT.puts "Test"
-	STDOUT.puts src_ip
-	STDOUT.puts $nodes[$hostname]["PORT"]
-	STDOUT.puts $hostname
+	$nodes[$hostname]["IP"] = src_ip
 
-	dst_socket = TCPSocket.new(dst_ip, $port)
-
-	STDOUT.puts "Program entered edgeb method. Method still in developement"
+	# connect to server and tell it who is connecting to it
+	dst_socket = TCPSocket.new(dst_ip, dst_port)
+	dst_socket.send("#{$hostname} #{src_ip}\000", 0)
 end
 
 def dumptable(cmd)
@@ -161,8 +158,8 @@ def setup(hostname, port, nodes, config)
 
 	#set up ports, server, buffers
 	$socketToNode = {} #Hashmap to index node by socket
-	
-	counter = 0
+
+	# keep track of all nodes in hashtable
 	fHandle = File.open(nodes)
 	while(line = fHandle.gets())
 		arr = line.chomp().split(',')
@@ -170,15 +167,11 @@ def setup(hostname, port, nodes, config)
 		node_name = arr[0]
 		node_port = arr[1]
 
-		if node_name == hostname
-			$index = counter
-		end
-
 		$nodes[node_name] = {}
 		$nodes[node_name]["PORT"] = node_port
-		counter += counter
 	end
 
+	#keep track of config variables
 	fHandle = File.open(config)
 	while(line = fHandle.gets())
 		arr = line.chomp().split('=')
@@ -197,6 +190,7 @@ def setup(hostname, port, nodes, config)
 			
 	end
 
+	# start separate server thread
 	server_thread = Thread.new do
 		run_server()
 	end	
