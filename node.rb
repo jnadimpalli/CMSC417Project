@@ -43,6 +43,9 @@ def run_server
 	
 					dst_port = $nodes[node_name]["PORT"]
 					dst_socket = TCPSocket.new(node_ip, dst_port)
+					
+					#save destination socket so that you can send messages through here later
+					$nodes[node_name]["SOCKET"] = dst_socket
 				end
 				client.flush
 			end
@@ -67,6 +70,9 @@ def edgeb(cmd)
 	# connect to server and tell it who is connecting to it
 	dst_socket = TCPSocket.new(dst_ip, dst_port)
 	dst_socket.send("#{$hostname} #{src_ip}\000", 0)
+	
+	#save destination socket so that you can send messages through here later
+	$nodes[dst_name]["SOCKET"] = dst_socket
 end
 
 def dumptable(cmd)
