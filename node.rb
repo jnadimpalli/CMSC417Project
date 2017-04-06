@@ -15,7 +15,10 @@ $pingTimeout = nil
 # --------------------- Part 0 --------------------- # 
 
 def run_server
+	# start server
 	$server = TCPServer.open($port)
+	
+	#create array to keep track of sockets we can read from
 	reading = [$server]
 
 	while true
@@ -30,22 +33,45 @@ def run_server
 		        	reading.push(client)
 				
 				message = client.gets("\0")
-				# if there is a message that means we have to create a symmetric connction to the other server
+				
+				
 				if message != nil
 					message = message.chomp
-					node_info = message.split(' ')
-					node_name = node_info[0]
-					node_ip = node_info[1]
+					message_info = message.split(' ')
 					
-					#update node info
-					$nodes[node_name]["IP"] = node_ip
-					$nodes[node_name]["COST"] = 1				
-	
-					dst_port = $nodes[node_name]["PORT"]
-					dst_socket = TCPSocket.new(node_ip, dst_port)
+					message_type = message_info[0]
 					
-					#save destination socket so that you can send messages through here later
-					$nodes[node_name]["SOCKET"] = dst_socket
+					case message_type
+					# we have to create a symmetric connction to the other server
+					when "EDGEB"
+						node_name = message_info[1]
+						node_ip = message_info[2]
+
+						#update node info
+						$nodes[node_name]["IP"] = node_ip
+						$nodes[node_name]["COST"] = 1				
+
+						dst_port = $nodes[node_name]["PORT"]
+						dst_socket = TCPSocket.new(node_ip, dst_port)
+
+						#save destination socket so that you can send messages through here later
+						$nodes[node_name]["SOCKET"] = dst_socket
+						
+					# for this option a client is requesting that we return info about the cost to our neighbors
+					when "COST"
+						# here is some example code for how this might look
+						
+						# return_node = message_info[1]
+						
+						#construct a single string with info on the cost of every neighboring node
+						#could look like this "n1,1 n2,2 n3,-1 n4,1"
+						
+						#send that string back in a socket message like this
+						# return_socket = $nodes[return_node]["SOCKET"]
+						# return_socket.send("that string\000", 0)
+						# IMPORTANT: must end the string with \000 because that tells
+						# server to keep connection to socket open
+					end
 				end
 				client.flush
 			end
@@ -69,7 +95,7 @@ def edgeb(cmd)
 
 	# connect to server and tell it who is connecting to it
 	dst_socket = TCPSocket.new(dst_ip, dst_port)
-	dst_socket.send("#{$hostname} #{src_ip}\000", 0)
+	dst_socket.send("EDGEB #{$hostname} #{src_ip}\000", 0)
 	
 	#save destination socket so that you can send messages through here later
 	$nodes[dst_name]["SOCKET"] = dst_socket
@@ -81,6 +107,20 @@ def dumptable(cmd)
   # for each node, check to see if a COST exists.
   # If so, add to file in order: src,dst,nextHop,distance
   $nodes.keys.each do |node|
+	  
+	#since we would probably need to have an entry in the table for nodes that aren't
+	#directly connected (like if we have a node n1 connected to n2 connected to n3 we would
+	#need an entry for n3 in n1 dump table) I made some space here for a depth first (or breadth first)
+	#search to get the cost. I would recommend sending a message to the other servers and getting info back
+	#from them like this:
+	  
+	# for each node do this 
+	# socket = $nodes[whatever node]["SOCKET"]
+	# socket.send("COST {hostname (this is because the server needs a return address)}")
+	  
+	#see the run_server method on what to do next
+	  
+	  
     if $nodes[node]["COST"] != nil
       File.open(filename, "w") {|f|
         f.write($hostname + "," + node + "," + node + "," + $nodes[node]["COST"].to_s + "\n")
