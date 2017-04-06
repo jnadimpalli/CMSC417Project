@@ -15,19 +15,19 @@ $pingTimeout = nil
 # --------------------- Part 0 --------------------- # 
 
 def run_server
-	server = TCPServer.open($port)
-	reading = [server]
+	$server = TCPServer.open($port)
+	reading = [$server]
 
 	while true
 		results = IO.select(reading)
 	
 		read = results[0]
-	
+
 		read.each do |socket|
-	        	if socket == server
+	        	if socket == $server
 	           		# A new client is connecting to server
-		        	client, addr_info = server.accept_nonblock
-		        	reading .push(client)
+		        	client, addr_info = $server.accept_nonblock
+		        	reading.push(client)
 				
 				message = client.gets("\0")
 				# if there is a message that means we have to create a symmetric connction to the other server
@@ -70,12 +70,24 @@ def edgeb(cmd)
 end
 
 def dumptable(cmd)
-	STDOUT.puts "DUMPTABLE: not implemented"
+  filename = cmd[0].split("./")[1]
+
+  # for each node, check to see if a COST exists.
+  # If so, add to file in order: src,dst,nextHop,distance
+  $nodes.keys.each do |node|
+    if $nodes[node]["COST"] != nil
+      File.open(filename, "w") {|f|
+        f.write($hostname + "," + node + "," + node + "," + $nodes[node]["COST"].to_s + "\n")
+      }
+    end
+  end
 end
 
 def shutdown(cmd)
-	STDOUT.puts "SHUTDOWN: not implemented"
-	exit(0)
+  $server.close
+  STDOUT.flush
+  STDERR.flush
+  exit(0)
 end
 
 
@@ -168,7 +180,7 @@ def setup(hostname, port, nodes, config)
 		node_port = arr[1]
 
 		$nodes[node_name] = {}
-		$nodes[node_name]["PORT"] = node_port
+		$nodes[node_name]["PORT"] = node_port.to_i
 	end
 
 	#keep track of config variables
