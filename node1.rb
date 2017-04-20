@@ -7,6 +7,7 @@ $server = nil
 
 $nodes = {}
 $lsp = {}
+$sequencenum = 1
 
 $updateInterval = nil
 $maxPayload = nil
@@ -33,79 +34,143 @@ def run_server
 		        	client, addr_info = $server.accept_nonblock
 		        	reading.push(client)
 
-				message = client.gets("\0")
-				# recv and read don't seem to work with write
-				#message = client.recv
-				#message = client.read()
+					message = client.gets("\0")
 
-				STDERR.puts "message read at " + $hostname + ": " + message
+					STDERR.puts "message read at " + $hostname + ": " + message
 
-				if message != nil
-					message = message.chomp
-					message_info = message.split(' ')
+					if message != nil
+						message = message.chomp
+						message_info = message.split(' ')
 
-					message_type = message_info[0]
+						message_type = message_info[0]
 
-					case message_type
-					# we have to create a symmetric connection to the other server
-					when "EDGEB"
-						node_name = message_info[1]
-						node_ip = message_info[2]
+						case message_type
+						# we have to create a symmetric connection to the other server
+						when "EDGEB"
+							node_name = message_info[1]
+							node_ip = message_info[2]
 
-						#update node info
-						$nodes[node_name]["IP"] = node_ip
-						$nodes[node_name]["COST"] = 1
+							#update node info
+							$nodes[node_name]["IP"] = node_ip
+							$nodes[node_name]["COST"] = 1
 
-						dst_port = $nodes[node_name]["PORT"]
-						dst_socket = TCPSocket.new(node_ip, dst_port)
+							dst_port = $nodes[node_name]["PORT"]
+							dst_socket = TCPSocket.new(node_ip, dst_port)
 
-						#save destination socket so that you can send messages through here later
-						$nodes[node_name]["SOCKET"] = dst_socket
+							#save destination socket so that you can send messages through here later
+							$nodes[node_name]["SOCKET"] = dst_socket
 
-						#STDERR.puts $nodes
-						STDERR.puts "Leaving EDGEB at " + $hostname
-						#STDERR.puts $nodes
+							#STDERR.puts $nodes
+							STDERR.puts "Leaving EDGEB at " + $hostname
+							#STDERR.puts $nodes
 
-					# for this option a client is requesting that we return info about the cost to our neighbors
-					when "COST"
-						STDERR.puts "In COST for " + $hostname
-						#STDERR.puts $nodes
-			            cost_string = ""
-			            return_node = message_info[1]
+						# for this option a client is requesting that we return info about the cost to our neighbors
+						when "COST"
+							STDERR.puts "In COST for " + $hostname
+							#STDERR.puts $nodes
+				            cost_string = ""
+				            return_node = message_info[1]
 
-						STDERR.puts "return: " + return_node
-						STDERR.puts $nodes
-						#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
+							STDERR.puts "return: " + return_node
+							STDERR.puts $nodes
+							#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
 
-						STDERR.puts "Received COST request in " + $hostname + " from " + return_node
-						# return cost to all other nodes that are not the hostname
-			            $nodes.keys.each do |node|
-							if node != $hostname
-					        	cost_string += node + "," + $nodes[node]["COST"].to_s + " "
-					        end
+							STDERR.puts "Received COST request in " + $hostname + " from " + return_node
+							# return cost to all other nodes that are not the hostname
+				            $nodes.keys.each do |node|
+								if node != $hostname
+						        	cost_string += node + "," + $nodes[node]["COST"].to_s + " "
+						        end
+							end
+
+				            #cost_string += "\000"
+							STDERR.puts "cost_string_sent: " + cost_string
+							client.write(cost_string.chomp + " \0")
+							STDERR.puts "Writing cost_string to socket"
+
+							# here is some example code for how this might look
+
+							# return_node = message_info[1]
+
+							#construct a single string with info on the cost of every neighboring node
+							#could look like this "n1,1 n2,2 n3,-1 n4,1"
+
+							#send that string back in a socket message like this
+							# return_socket = $nodes[return_node]["SOCKET"]
+							# return_socket.send("that string\000", 0)
+							# IMPORTANT: must end the string with \000 because that tells
+							# server to keep connection to socket open
+						when "LSP"
+							STDERR.puts "In LSP for " + $hostname
+							#STDERR.puts $nodes
+							cost_string = ""
+				            lsp_string = ""
+							ttl = 60
+				            return_path = message_info[1]
+
+							STDERR.puts "return: " + return_path
+							STDERR.puts $nodes
+							#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
+
+							STDERR.puts "Received LSP request in " + $hostname + " from " + return_path
+							# return cost to all other nodes that are not the hostname
+
+							$nodes.keys.each do |node|
+								if node != $hostname
+						        	cost_string += node + "," + $nodes[node]["COST"].to_s + ":"
+						        end
+							end
+
+							STDERR.puts "cost_string: " + cost_string
+
+							lsp_string = $sequencenum.to_s + " " + cost_string.chomp(":") + " " + ttl.to_s + " " + return_path
+
+							$sequencenum = $sequencenum + 1
+
+				            #cost_string += "\000"
+							STDERR.puts "lsp_string_sent: " + lsp_string
+							client.write(lsp_string.chomp + " \0")
+							STDERR.puts "Writing lsp_string to socket"
 						end
+					end
+				client.flush
+			# elsif socket.eof?
+	        #     STDERR.puts "Client disconnected"
+	        #     reading.delete(socket)
+	        #     socket.close
+	        else
+	            # Perform a blocking-read until new-line is encountered.
+	            # We know the client is writing, so as long as it adheres to the
+	            # new-line protocol, we shouldn't block for very long.
+	            STDERR.puts "Reading..."
+	            message = socket.gets("\0")
+				message = message.chomp
+				message_info = message.split(' ')
 
-			            #cost_string += "\000"
-						STDERR.puts "cost_string_sent: " + cost_string
-						client.write(cost_string.chomp + " \0")
-						STDERR.puts "Writing cost_string to socket"
+				message_type = message_info[0]
 
-						# here is some example code for how this might look
+				STDERR.puts "In COST for " + $hostname
+				#STDERR.puts $nodes
+				cost_string = ""
+				return_node = message_info[1]
 
-						# return_node = message_info[1]
+				STDERR.puts "return: " + return_node
+				STDERR.puts $nodes
+				#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
 
-						#construct a single string with info on the cost of every neighboring node
-						#could look like this "n1,1 n2,2 n3,-1 n4,1"
-
-						#send that string back in a socket message like this
-						# return_socket = $nodes[return_node]["SOCKET"]
-						# return_socket.send("that string\000", 0)
-						# IMPORTANT: must end the string with \000 because that tells
-						# server to keep connection to socket open
+				STDERR.puts "Received COST request in " + $hostname + " from " + return_node
+				# return cost to all other nodes that are not the hostname
+				$nodes.keys.each do |node|
+					if node != $hostname
+						cost_string += node + "," + $nodes[node]["COST"].to_s + " "
 					end
 				end
-				client.flush
-			end
+
+				#cost_string += "\000"
+				STDERR.puts "cost_string_sent: " + cost_string
+				socket.write(cost_string.chomp + " \0")
+				STDERR.puts "Writing cost_string to socket"
+	    	end
 		end
 	end
 end
@@ -127,13 +192,13 @@ def edgeb(cmd)
 	# connect to server and tell it who is connecting to it
 	dst_socket = TCPSocket.new(dst_ip, dst_port)
 	dst_socket.write("EDGEB #{$hostname} #{src_ip} \0")
+	dst_socket.flush
 	#dst_socket.write("EDGEB #{$hostname} #{src_ip}\000")
 	#dst_socket.send("EDGEB #{$hostname} #{src_ip}\000", 0)
 
 	#save destination socket so that you can send messages through here later
 	$nodes[dst_name]["SOCKET"] = dst_socket
 	STDERR.puts "Client EDGEB complete at " + $hostname
-	#STDERR.puts $nodes
 end
 
 def dumptable(cmd)
@@ -221,7 +286,8 @@ def dijkstras(source)
 	end
 end
 
-def status()
+def status1()
+
 	stack = [$hostname]
 	visited = []
 
@@ -235,10 +301,17 @@ def status()
 			# if current_node is not the host, request COST message to build routing table
 			if current_node != $hostname
 				if $nodes[current_node]["SOCKET"] != nil
-					#socket = $nodes[current_node]["SOCKET"]
-					socket = TCPSocket.new($nodes[current_node]["IP"], $nodes[current_node]["PORT"])
+					socket = $nodes[current_node]["SOCKET"]
+					STDERR.puts "IP: " + $nodes[current_node]["IP"]
+					STDERR.puts "PORT: " + $nodes[current_node]["PORT"].to_s
+
+					#socket = TCPSocket.new($nodes[current_node]["IP"], $nodes[current_node]["PORT"])
 					#socket.send("COST #{$hostname}\000", 0)
 					socket.write("COST #{$hostname} \0")
+					# socket.puts("COST #{$hostname}")
+					#socket.send("COST #{$hostname} \000", 0)
+
+
 					STDERR.puts "COST message sent to " + current_node
 
 					# gets/recv/read do not seem to be reading the string back from the socket after using write
@@ -246,7 +319,7 @@ def status()
 					#cost_string = socket.read()
 					#cost_string = socket.recv_nonblock($maxPayload)
 					#cost_string = socket.recv(16)
-					#socket.flush
+					socket.flush
 
 					# code does not reach this point
 					STDERR.puts "cost_string_recv: \"" + cost_string + "\""
@@ -290,6 +363,73 @@ def status()
 		end
 		STDERR.puts $nodes
 	end
+end
+
+def status()
+
+	# start with DFS to retrieve LSP from all other nodes
+	stack = [$hostname]
+	visited = []
+
+	while !stack.empty?
+		current_node = stack.pop
+		if !visited.include? current_node
+			visited.push(current_node)
+			if current_node != $hostname
+				if $nodes[current_node]["SOCKET"] != nil
+					socket = TCPSocket.new($nodes[current_node]["IP"], $nodes[current_node]["PORT"])
+					socket.write("LSP #{$hostname} \0")
+					STDERR.puts "LSP message sent to " + current_node
+
+					# gets/recv/read do not seem to be reading the string back from the socket after using write
+					lsp_string = socket.gets("\0")
+					#cost_string = socket.read()
+					#cost_string = socket.recv_nonblock($maxPayload)
+					#cost_string = socket.recv(16)
+					socket.flush
+
+					# code does not reach this point
+					STDERR.puts "lsp_string_recv: \"" + lsp_string + "\""
+
+					STDERR.puts "Parsing lsp_string"
+					neighbors = lsp_string.chomp.strip.split(" ")
+					neighbors.each do |n|
+						STDERR.puts "n: \"" + n + "\""
+
+						node_cost = n.split(",")
+						node_neighbor = node_cost[0]
+						cost_neighbor = node_cost[1].to_i
+
+						# STDERR.puts "neighbor: " + node_neighbor
+						# STDERR.puts "cost: " + cost_neighbor.to_s
+						# STDERR.puts node_neighbor.length > 0
+						# STDERR.puts node_neighbor.length > 1
+						# add children of current_node to stack for processing
+						stack.push(node_neighbor)
+						# if route was previously unreachable (-1) or if new route has lower cost, update cost in host's routing table
+						STDERR.puts "current: " + current_node
+						if (cost_neighbor != -1)
+							if ($nodes[node_neighbor]["COST"] == -1) || ($nodes[node_neighbor]["COST"] > ($nodes[current_node]["COST"] + cost_neighbor))
+								$nodes[node_neighbor]["COST"] = $nodes[current_node]["COST"] + cost_neighbor
+								STDERR.puts "Updated value for " + node_neighbor + " in " + $hostname
+								STDERR.puts "Previous cost: " + $nodes[current_node]["COST"].to_s
+								STDERR.puts "Cost to add: " + cost_neighbor.to_s
+								STDERR.puts "New cost: " + ($nodes[current_node]["COST"] + cost_neighbor).to_s
+							end
+						end
+					end
+				end
+			else
+				# if current_node is the host, just add children since routing table is already available
+				$nodes.keys.each do |node|
+					if $nodes[node]["COST"] > 0
+						stack.push(node)
+					end
+				end
+			end
+		end
+	end
+
 
 
 	#since we would probably need to have an entry in the table for nodes that aren't
@@ -371,14 +511,6 @@ def setup(hostname, port, nodes, config)
 	$hostname = hostname
 	$port = port
 
-	# start separate server thread
-	# server_thread = Thread.new do
-	# 	run_server()
-	# end
-
-	#set up ports, server, buffers
-	#$socketToNode = {} #Hashmap to index node by socket
-
 	# keep track of all nodes in hashtable
 	fHandle = File.open(nodes)
 	while(line = fHandle.gets())
@@ -396,9 +528,17 @@ def setup(hostname, port, nodes, config)
 		if node_name == $hostname
 			$nodes[node_name]["COST"] = 0
 		end
+
+		$lsp[node_name] = {}
+		$lsp[node_name]["COST"] = ""
+		if node_name == $hostname
+			$lsp[node_name]["COST"] = nil
+		end
+		$lsp[node_name]["TTL"] = -1
+		$lsp[node_name]["NUM"] = -1
 	end
 
-	#STDERR.puts $nodes
+	#STDERR.puts $lsp
 
 	#keep track of config variables
 	fHandle = File.open(config)
