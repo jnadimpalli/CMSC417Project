@@ -29,115 +29,43 @@ def run_server
 		read = results[0]
 
 		read.each do |socket|
-	        	if socket == $server
-	           		# A new client is connecting to server
-		        	client, addr_info = $server.accept_nonblock
-		        	reading.push(client)
+        	if socket == $server
+           		# A new client is connecting to server
+	        	client, addr_info = $server.accept_nonblock
+	        	reading.push(client)
 
-					message = client.gets("\0")
+				message = client.gets("\0")
 
-					STDERR.puts "message read at " + $hostname + ": " + message
+				STDERR.puts "message read at " + $hostname + ": " + message
 
-					if message != nil
-						message = message.chomp
-						message_info = message.split(' ')
+				if message != nil
+					message = message.chomp
+					message_info = message.split(' ')
 
-						message_type = message_info[0]
+					message_type = message_info[0]
 
-						case message_type
-						# we have to create a symmetric connection to the other server
-						when "EDGEB"
-							node_name = message_info[1]
-							node_ip = message_info[2]
+					case message_type
+					# we have to create a symmetric connection to the other server
+					when "EDGEB"
+						node_name = message_info[1]
+						node_ip = message_info[2]
 
-							#update node info
-							$nodes[node_name]["IP"] = node_ip
-							$nodes[node_name]["COST"] = 1
+						#update node info
+						$nodes[node_name]["IP"] = node_ip
+						$nodes[node_name]["COST"] = 1
 
-							dst_port = $nodes[node_name]["PORT"]
-							dst_socket = TCPSocket.new(node_ip, dst_port)
+						dst_port = $nodes[node_name]["PORT"]
+						dst_socket = TCPSocket.new(node_ip, dst_port)
 
-							#save destination socket so that you can send messages through here later
-							$nodes[node_name]["SOCKET"] = dst_socket
+						#save destination socket so that you can send messages through here later
+						$nodes[node_name]["SOCKET"] = dst_socket
 
-							#STDERR.puts $nodes
-							STDERR.puts "Leaving EDGEB at " + $hostname
-							#STDERR.puts $nodes
-
-						# for this option a client is requesting that we return info about the cost to our neighbors
-						when "COST"
-							STDERR.puts "In COST for " + $hostname
-							#STDERR.puts $nodes
-				            cost_string = ""
-				            return_node = message_info[1]
-
-							STDERR.puts "return: " + return_node
-							STDERR.puts $nodes
-							#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
-
-							STDERR.puts "Received COST request in " + $hostname + " from " + return_node
-							# return cost to all other nodes that are not the hostname
-				            $nodes.keys.each do |node|
-								if node != $hostname
-						        	cost_string += node + "," + $nodes[node]["COST"].to_s + " "
-						        end
-							end
-
-				            #cost_string += "\000"
-							STDERR.puts "cost_string_sent: " + cost_string
-							client.write(cost_string.chomp + " \0")
-							STDERR.puts "Writing cost_string to socket"
-
-							# here is some example code for how this might look
-
-							# return_node = message_info[1]
-
-							#construct a single string with info on the cost of every neighboring node
-							#could look like this "n1,1 n2,2 n3,-1 n4,1"
-
-							#send that string back in a socket message like this
-							# return_socket = $nodes[return_node]["SOCKET"]
-							# return_socket.send("that string\000", 0)
-							# IMPORTANT: must end the string with \000 because that tells
-							# server to keep connection to socket open
-						when "LSP"
-							STDERR.puts "In LSP for " + $hostname
-							#STDERR.puts $nodes
-							cost_string = ""
-				            lsp_string = ""
-							ttl = 60
-				            return_path = message_info[1]
-
-							STDERR.puts "return: " + return_path
-							STDERR.puts $nodes
-							#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
-
-							STDERR.puts "Received LSP request in " + $hostname + " from " + return_path
-							# return cost to all other nodes that are not the hostname
-
-							$nodes.keys.each do |node|
-								if node != $hostname
-						        	cost_string += node + "," + $nodes[node]["COST"].to_s + ":"
-						        end
-							end
-
-							STDERR.puts "cost_string: " + cost_string
-
-							lsp_string = $sequencenum.to_s + " " + cost_string.chomp(":") + " " + ttl.to_s + " " + return_path
-
-							$sequencenum = $sequencenum + 1
-
-				            #cost_string += "\000"
-							STDERR.puts "lsp_string_sent: " + lsp_string
-							client.write(lsp_string.chomp + " \0")
-							STDERR.puts "Writing lsp_string to socket"
-						end
+						#STDERR.puts $nodes
+						STDERR.puts "Leaving EDGEB at " + $hostname
+						#STDERR.puts $nodes
 					end
+				end
 				client.flush
-			# elsif socket.eof?
-	        #     STDERR.puts "Client disconnected"
-	        #     reading.delete(socket)
-	        #     socket.close
 	        else
 	            # Perform a blocking-read until new-line is encountered.
 	            # We know the client is writing, so as long as it adheres to the
@@ -149,27 +77,62 @@ def run_server
 
 				message_type = message_info[0]
 
-				STDERR.puts "In COST for " + $hostname
-				#STDERR.puts $nodes
-				cost_string = ""
-				return_node = message_info[1]
+				case message_type
+				# for this option a client is requesting that we return info about the cost to our neighbors
+				when "COST"
+					STDERR.puts "In COST for " + $hostname
+					#STDERR.puts $nodes
+					cost_string = ""
+					return_node = message_info[1]
 
-				STDERR.puts "return: " + return_node
-				STDERR.puts $nodes
-				#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
+					STDERR.puts "return: " + return_node
+					STDERR.puts $nodes
+					#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
 
-				STDERR.puts "Received COST request in " + $hostname + " from " + return_node
-				# return cost to all other nodes that are not the hostname
-				$nodes.keys.each do |node|
-					if node != $hostname
-						cost_string += node + "," + $nodes[node]["COST"].to_s + " "
+					STDERR.puts "Received COST request in " + $hostname + " from " + return_node
+					# return cost to all other nodes that are not the hostname
+					$nodes.keys.each do |node|
+						if node != $hostname
+							cost_string += node + "," + $nodes[node]["COST"].to_s + " "
+						end
 					end
-				end
 
-				#cost_string += "\000"
-				STDERR.puts "cost_string_sent: " + cost_string
-				socket.write(cost_string.chomp + " \0")
-				STDERR.puts "Writing cost_string to socket"
+					#cost_string += "\000"
+					STDERR.puts "cost_string_sent: " + cost_string
+					client.write(cost_string.chomp + " \0")
+					STDERR.puts "Writing cost_string to socket"
+				when "LSP"
+					STDERR.puts "In LSP for " + $hostname
+					#STDERR.puts $nodes
+					cost_string = ""
+					lsp_string = ""
+					ttl = 60
+					return_path = message_info[1]
+
+					STDERR.puts "return: " + return_path
+					STDERR.puts $nodes
+					#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
+
+					STDERR.puts "Received LSP request in " + $hostname + " from " + return_path
+					# return cost to all other nodes that are not the hostname
+
+					$nodes.keys.each do |node|
+						if node != $hostname
+							cost_string += node + "," + $nodes[node]["COST"].to_s + ":"
+						end
+					end
+
+					STDERR.puts "cost_string: " + cost_string
+
+					lsp_string = $sequencenum.to_s + " " + cost_string.chomp(":") + " " + ttl.to_s + " " + return_path
+
+					$sequencenum = $sequencenum + 1
+
+					#cost_string += "\000"
+					STDERR.puts "lsp_string_sent: " + lsp_string
+					client.write(lsp_string.chomp + " \0")
+					STDERR.puts "Writing lsp_string to socket"
+				end
 	    	end
 		end
 	end
@@ -377,7 +340,8 @@ def status()
 			visited.push(current_node)
 			if current_node != $hostname
 				if $nodes[current_node]["SOCKET"] != nil
-					socket = TCPSocket.new($nodes[current_node]["IP"], $nodes[current_node]["PORT"])
+					socket = $nodes[current_node]["SOCKET"]
+					#socket = TCPSocket.new($nodes[current_node]["IP"], $nodes[current_node]["PORT"])
 					socket.write("LSP #{$hostname} \0")
 					STDERR.puts "LSP message sent to " + current_node
 
