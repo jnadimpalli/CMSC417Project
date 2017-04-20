@@ -64,15 +64,17 @@ def run_server
 
 						#STDERR.puts $nodes
 						STDERR.puts "Leaving EDGEB at " + $hostname
+						#STDERR.puts $nodes
 
 					# for this option a client is requesting that we return info about the cost to our neighbors
 					when "COST"
 						STDERR.puts "In COST for " + $hostname
 						#STDERR.puts $nodes
 			            cost_string = ""
-			            return_node = message_info[1].trim
+			            return_node = message_info[1]
 
-						#STDERR.puts "return: " + return_node
+						STDERR.puts "return: " + return_node
+						STDERR.puts $nodes
 						#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
 
 						STDERR.puts "Received COST request in " + $hostname + " from " + return_node
@@ -86,13 +88,14 @@ def run_server
 			            #cost_string += "\000"
 						STDERR.puts "cost_string1: " + cost_string
 
-			            return_socket = $nodes[return_node]["SOCKET"]
+			            #return_socket = $nodes[return_node]["SOCKET"]
 						STDERR.puts "1"
-						return_socket.flush
+						#return_socket.flush
 						STDERR.puts "2"
-						return_socket.write(cost_string + "\000")
+						client.write(cost_string.chomp + " \0")
+						#return_socket.write(cost_string + "\000")
 						STDERR.puts "3"
-						return_socket.flush
+						#return_socket.flush
 						STDERR.puts "Writing cost_string to socket"
 
 						# here is some example code for how this might look
@@ -127,17 +130,18 @@ def edgeb(cmd)
 	$nodes[dst_name]["COST"] = 1
 	$nodes[dst_name]["IP"] = dst_ip
 
-	$nodes[$hostname]["IP"] = src_ip
+	#$nodes[$hostname]["IP"] = src_ip
 
 	# connect to server and tell it who is connecting to it
 	dst_socket = TCPSocket.new(dst_ip, dst_port)
-	dst_socket.write("EDGEB #{$hostname} #{src_ip}\000")
+	dst_socket.write("EDGEB #{$hostname} #{src_ip} \0")
 	#dst_socket.write("EDGEB #{$hostname} #{src_ip}\000")
 	#dst_socket.send("EDGEB #{$hostname} #{src_ip}\000", 0)
 
 	#save destination socket so that you can send messages through here later
 	$nodes[dst_name]["SOCKET"] = dst_socket
 	STDERR.puts "Client EDGEB complete at " + $hostname
+	#STDERR.puts $nodes
 end
 
 def dumptable(cmd)
@@ -228,8 +232,8 @@ end
 def status()
 	stack = [$hostname]
 	visited = []
-	filename = cmd[0].split("./")[1]
 
+	STDERR.puts $nodes
 	# perform DFS to find all possible routes
 	while !stack.empty?
 		current_node = stack.pop
@@ -242,7 +246,7 @@ def status()
 					#socket = $nodes[current_node]["SOCKET"]
 					socket = TCPSocket.new($nodes[current_node]["IP"], $nodes[current_node]["PORT"])
 					#socket.send("COST #{$hostname}\000", 0)
-					socket.write("COST #{$hostname}\000")
+					socket.write("COST #{$hostname} \0")
 					STDERR.puts "COST message sent to " + current_node
 
 					# gets/recv/read do not seem to be reading the string back from the socket after using write
@@ -250,25 +254,33 @@ def status()
 					#cost_string = socket.read()
 					#cost_string = socket.recv_nonblock($maxPayload)
 					#cost_string = socket.recv(16)
-					socket.flush
+					#socket.flush
 
 					# code does not reach this point
-					STDERR.puts "cost_string2: " + cost_string
+					STDERR.puts "cost_string2: \"" + cost_string + "\""
 
 					STDERR.puts "Parsing cost_string"
-					neighbors = cost_string.chomp.split(" ")
+					neighbors = cost_string.chomp.strip.split(" ")
 					neighbors.each do |n|
+						STDERR.puts "n: \"" + n + "\""
+
 						node_cost = n.split(",")
 						node_neighbor = node_cost[0]
 						cost_neighbor = node_cost[1].to_i
 
+						# STDERR.puts "neighbor: " + node_neighbor
+						# STDERR.puts "cost: " + cost_neighbor.to_s
+						# STDERR.puts node_neighbor.length > 0
+						# STDERR.puts node_neighbor.length > 1
 						# add children of current_node to stack for processing
 						stack.push(node_neighbor)
-
 						# if route was previously unreachable (-1) or if new route has lower cost, update cost in host's routing table
+						STDERR.puts "current: " + current_node
 						if ($nodes[node_neighbor]["COST"] == -1) || ($nodes[node_neighbor]["COST"] > ($nodes[current_node]["COST"] + cost_neighbor))
 							$nodes[node_neighbor]["COST"] = $nodes[current_node]["COST"] + cost_neighbor
+							STDERR.puts $nodes
 						end
+
 					end
 				end
 			else
@@ -373,12 +385,13 @@ def setup(hostname, port, nodes, config)
 	# keep track of all nodes in hashtable
 	fHandle = File.open(nodes)
 	while(line = fHandle.gets())
-		arr = line.chomp().split(',')
+		arr = line.chomp.split(',')
 
 		node_name = arr[0]
 		node_port = arr[1]
 
 		$nodes[node_name] = {}
+		$nodes[node_name]["IP"] = nil
 		$nodes[node_name]["SOCKET"] = nil
 		$nodes[node_name]["PORT"] = node_port.to_i
 		# 0 is self, -1 is unreachable (infinity)
