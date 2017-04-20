@@ -86,16 +86,8 @@ def run_server
 						end
 
 			            #cost_string += "\000"
-						STDERR.puts "cost_string1: " + cost_string
-
-			            #return_socket = $nodes[return_node]["SOCKET"]
-						STDERR.puts "1"
-						#return_socket.flush
-						STDERR.puts "2"
+						STDERR.puts "cost_string_sent: " + cost_string
 						client.write(cost_string.chomp + " \0")
-						#return_socket.write(cost_string + "\000")
-						STDERR.puts "3"
-						#return_socket.flush
 						STDERR.puts "Writing cost_string to socket"
 
 						# here is some example code for how this might look
@@ -257,7 +249,7 @@ def status()
 					#socket.flush
 
 					# code does not reach this point
-					STDERR.puts "cost_string2: \"" + cost_string + "\""
+					STDERR.puts "cost_string_recv: \"" + cost_string + "\""
 
 					STDERR.puts "Parsing cost_string"
 					neighbors = cost_string.chomp.strip.split(" ")
@@ -276,11 +268,15 @@ def status()
 						stack.push(node_neighbor)
 						# if route was previously unreachable (-1) or if new route has lower cost, update cost in host's routing table
 						STDERR.puts "current: " + current_node
-						if ($nodes[node_neighbor]["COST"] == -1) || ($nodes[node_neighbor]["COST"] > ($nodes[current_node]["COST"] + cost_neighbor))
-							$nodes[node_neighbor]["COST"] = $nodes[current_node]["COST"] + cost_neighbor
-							STDERR.puts $nodes
+						if (cost_neighbor != -1)
+							if ($nodes[node_neighbor]["COST"] == -1) || ($nodes[node_neighbor]["COST"] > ($nodes[current_node]["COST"] + cost_neighbor))
+								$nodes[node_neighbor]["COST"] = $nodes[current_node]["COST"] + cost_neighbor
+								STDERR.puts "Updated value for " + node_neighbor + " in " + $hostname
+								STDERR.puts "Previous cost: " + $nodes[current_node]["COST"].to_s
+								STDERR.puts "Cost to add: " + cost_neighbor.to_s
+								STDERR.puts "New cost: " + ($nodes[current_node]["COST"] + cost_neighbor).to_s
+							end
 						end
-
 					end
 				end
 			else
@@ -292,6 +288,7 @@ def status()
 				end
 			end
 		end
+		STDERR.puts $nodes
 	end
 
 
