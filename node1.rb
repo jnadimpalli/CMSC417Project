@@ -72,6 +72,7 @@ def run_server
 					# Perform a blocking-read until new-line is encountered.
 					# We know the client is writing, so as long as it adheres to the
 					# new-line protocol, we shouldn't block for very long.
+					#STDERR.puts "Reading..."
 					message = socket.gets("\0")
 					message = message.chomp
 					message_info = message.split(' ')
@@ -129,8 +130,8 @@ def run_server
 
 						STDERR.puts "Passing LSP to all neighbors"
 						$nodes.keys.each do |node|
-							STDERR.puts node
-							STDERR.puts $nodes[node]["SOCKET"]
+							STDERR.puts "node: " + node
+							STDERR.puts "socket: " + $nodes[node]["SOCKET"]
 							if node != id && $nodes[node]["SOCKET"] != nil
 								STDERR.puts "LSP from " + id + " sent to " + node
 
@@ -291,116 +292,50 @@ end
 
 def dijkstras(source)
 	unvisited = []
-	distance = []
-	previous = []
+	distance = {}
+	previous = {}
 	min_value = Float::INFINITY
 	min_node = nil
 
 	$nodes.keys.each do |node|
-		distance[node] = Float::INFINITY
-		previous[node] = nil
-		unvisited.add(node)
+		$table[node]["COST"] = Float::INFINITY
+		$table[node]["NEXT"] = nil
+		unvisited.push(node)
 	end
 
-	distance[source] = 0
+	$table[source]["COST"] = 0
 
-	while !unvisited.empty
+	while !unvisited.empty?
+		$lsp.keys.each do |node|
+
+		end
+
+
 		distance.values.each do |value|
-			if value < min
-				min = value
+			if value < min_value
+				min_value = value
 			end
 		end
 
 		distance.keys.each do |node|
-			if distance[node] = min
+			if distance[node] = min_value
 				min_node = node
 				unvisited.delete(min_node)
 			end
 		end
 
-		$lsp.keys.each do |neighbor|
-			STDERR.puts neighbor
-			# if $nodes[neighbor]["COST"] > 0
-			# 	temp = distance[node] + $nodes[neighbor]["COST"]
-			# 	if temp < distance[node]
-			# 		distance[neighbor] = temp
-			# 		prev[neighbor] = node
-			# 	end
-			# end
-		end
+		# $lsp.keys.each do |neighbor|
+		# 	STDERR.puts "neighbor : " + neighbor
+		# 	# if $nodes[neighbor]["COST"] > 0
+		# 	# 	temp = distance[node] + $nodes[neighbor]["COST"]
+		# 	# 	if temp < distance[node]
+		# 	# 		distance[neighbor] = temp
+		# 	# 		prev[neighbor] = node
+		# 	# 	end
+		# 	# end
+		# end
 	end
 end
-=begin
-def status1()
-	stack = [$hostname]
-	visited = []
-	STDERR.puts $nodes
-	# perform DFS to find all possible routes
-	while !stack.empty?
-		current_node = stack.pop
-		if !visited.include? current_node
-			visited.push(current_node)
-			STDERR.puts "Visited " + current_node
-			# if current_node is not the host, request COST message to build routing table
-			if current_node != $hostname
-				if $nodes[current_node]["SOCKET"] != nil
-					socket = $nodes[current_node]["SOCKET"]
-					#STDERR.puts "IP: " + $nodes[current_node]["IP"]
-					#STDERR.puts "PORT: " + $nodes[current_node]["PORT"].to_s
-					#socket = TCPSocket.new($nodes[current_node]["IP"], $nodes[current_node]["PORT"])
-					#socket.send("COST #{$hostname}\000", 0)
-					socket.write("COST #{$hostname} \0")
-					# socket.puts("COST #{$hostname}")
-					#socket.send("COST #{$hostname} \000", 0)
-					STDERR.puts "COST message sent to " + current_node
-					# gets/recv/read do not seem to be reading the string back from the socket after using write
-					cost_string = socket.gets("\0")
-					#cost_string = socket.read()
-					#cost_string = socket.recv_nonblock($maxPayload)
-					#cost_string = socket.recv(16)
-					socket.flush
-					# code does not reach this point
-					STDERR.puts "cost_string_recv: \"" + cost_string + "\""
-					STDERR.puts "Parsing cost_string"
-					neighbors = cost_string.chomp.strip.split(" ")
-					neighbors.each do |n|
-						STDERR.puts "n: \"" + n + "\""
-						node_cost = n.split(",")
-						node_neighbor = node_cost[0]
-						cost_neighbor = node_cost[1].to_i
-						# STDERR.puts "neighbor: " + node_neighbor
-						# STDERR.puts "cost: " + cost_neighbor.to_s
-						# STDERR.puts node_neighbor.length > 0
-						# STDERR.puts node_neighbor.length > 1
-						# add children of current_node to stack for processing
-						stack.push(node_neighbor)
-						# if route was previously unreachable (-1) or if new route has lower cost, update cost in host's routing table
-						STDERR.puts "current: " + current_node
-						if (cost_neighbor != -1)
-							if ($nodes[node_neighbor]["COST"] == -1) || ($nodes[node_neighbor]["COST"] > ($nodes[current_node]["COST"] + cost_neighbor))
-								$nodes[node_neighbor]["COST"] = $nodes[current_node]["COST"] + cost_neighbor
-								STDERR.puts "Updated value for " + node_neighbor + " in " + $hostname
-								STDERR.puts "Previous cost: " + $nodes[current_node]["COST"].to_s
-								STDERR.puts "Cost to add: " + cost_neighbor.to_s
-								STDERR.puts "New cost: " + ($nodes[current_node]["COST"] + cost_neighbor).to_s
-							end
-						end
-					end
-				end
-			else
-				# if current_node is the host, just add children since routing table is already available
-				$nodes.keys.each do |node|
-					if $nodes[node]["COST"] > 0
-						stack.push(node)
-					end
-				end
-			end
-		end
-		STDERR.puts $nodes
-	end
-end
-=end
-
 
 def status()
 
@@ -468,64 +403,7 @@ def status()
 					STDERR.puts "LSP message sent to " + current_node
 
 					dijkstras($hostname)
-					#
-					# # gets/recv/read do not seem to be reading the string back from the socket after using write
-					# lsp_string = socket.gets("\0")
-					# #cost_string = socket.read()
-					# #cost_string = socket.recv_nonblock($maxPayload)
-					# #cost_string = socket.recv(16)
-					# socket.flush
-					#
-					# # code does not reach this point
-					# STDERR.puts "lsp_string_recv: \"" + lsp_string + "\""
-					#
-					# STDERR.puts "Parsing lsp_string"
-					# info = lsp_string.chomp.strip.split(" ")
-					# id = info[0]
-					# seqnum = info[1]
-					# cost_string = info[2]
-					# ttl = info[3]
-					# return_path = info[4]
-					#
-					# STDERR.puts "\"" + id + "\""
-					# STDERR.puts "\"" + seqnum.to_s + "\""
-					# STDERR.puts "\"" + cost_string + "\""
-					# STDERR.puts "\"" + ttl.to_s + "\""
-					# STDERR.puts "\"" + return_path + "\""
-					#
-					# $lsp[id]["NUM"] = seqnum
-					# $lsp[id]["TTL"] = ttl
-					#
-					# neighbors = cost_string.chomp.split(":")
-					# STDERR.puts neighbors
-					# neighbors.each do |n|
-					# 	node_cost = n.split(",")
-					# 	node_neighbor = node_cost[0]
-					# 	cost_neighbor = node_cost[1].to_i
-					# 	$lsp[id]["COST"][node_neighbor] = nil
-					# 	$lsp[id]["COST"][node_neighbor] = cost_neighbor
-					# end
-					#
-					# STDERR.puts $lsp
-
-					# 	# STDERR.puts "neighbor: " + node_neighbor
-					# 	# STDERR.puts "cost: " + cost_neighbor.to_s
-					# 	# STDERR.puts node_neighbor.length > 0
-					# 	# STDERR.puts node_neighbor.length > 1
-					 	# add children of current_node to stack for processing
-					# 	stack.push(node_neighbor)
-					# 	# if route was previously unreachable (-1) or if new route has lower cost, update cost in host's routing table
-					# 	STDERR.puts "current: " + current_node
-					# 	if (cost_neighbor != -1)
-					# 		if ($nodes[node_neighbor]["COST"] == -1) || ($nodes[node_neighbor]["COST"] > ($nodes[current_node]["COST"] + cost_neighbor))
-					# 			$nodes[node_neighbor]["COST"] = $nodes[current_node]["COST"] + cost_neighbor
-					# 			STDERR.puts "Updated value for " + node_neighbor + " in " + $hostname
-					# 			STDERR.puts "Previous cost: " + $nodes[current_node]["COST"].to_s
-					# 			STDERR.puts "Cost to add: " + cost_neighbor.to_s
-					# 			STDERR.puts "New cost: " + ($nodes[current_node]["COST"] + cost_neighbor).to_s
-					# 		end
-					# 	end
-					# end
+					STDERR.puts "Entered Dijkstras for " + $hostname
 				end
 			else
 				# if current_node is the host, just add children since routing table is already available
