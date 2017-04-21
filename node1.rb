@@ -29,182 +29,186 @@ def run_server
 
 		read = results[0]
 
-		read.each do |socket|
-        	if socket == $server
-           		# A new client is connecting to server
-	        	client, addr_info = $server.accept_nonblock
-	        	reading.push(client)
+		listening_thread = Thread.new do
+			read.each do |socket|
+				if socket == $server
+					# A new client is connecting to server
+					client, addr_info = $server.accept_nonblock
+					reading.push(client)
 
-				message = client.gets("\0")
+					message = client.gets("\0")
 
-				STDERR.puts "message read at " + $hostname + ": " + message
+					STDERR.puts "message read at " + $hostname + ": " + message
 
-				if message != nil
+					if message != nil
+						message = message.chomp
+						message_info = message.split(' ')
+
+						message_type = message_info[0]
+
+						case message_type
+						# we have to create a symmetric connection to the other server
+						when "EDGEB"
+							node_name = message_info[1]
+							node_ip = message_info[2]
+
+							#update node info
+							$nodes[node_name]["IP"] = node_ip
+							$nodes[node_name]["COST"] = 1
+
+							dst_port = $nodes[node_name]["PORT"]
+							dst_socket = TCPSocket.new(node_ip, dst_port)
+
+							#save destination socket so that you can send messages through here later
+							$nodes[node_name]["SOCKET"] = dst_socket
+
+							#STDERR.puts $nodes
+							STDERR.puts "Leaving EDGEB at " + $hostname
+							#STDERR.puts $nodes
+						end
+					end
+					client.flush
+				else
+					# Perform a blocking-read until new-line is encountered.
+					# We know the client is writing, so as long as it adheres to the
+					# new-line protocol, we shouldn't block for very long.
+					message = socket.gets("\0")
 					message = message.chomp
 					message_info = message.split(' ')
 
 					message_type = message_info[0]
 
+					#STDERR.puts message
+					#STDERR.puts message_info
+
 					case message_type
-					# we have to create a symmetric connection to the other server
-					when "EDGEB"
-						node_name = message_info[1]
-						node_ip = message_info[2]
+					# for this option a client is requesting that we return info about the cost to our neighbors
+					when "COST"
+						STDERR.puts "In COST for " + $hostname
 
-						#update node info
-						$nodes[node_name]["IP"] = node_ip
-						$nodes[node_name]["COST"] = 1
+						status()
+						STDERR.puts "Entered status()"
 
-						dst_port = $nodes[node_name]["PORT"]
-						dst_socket = TCPSocket.new(node_ip, dst_port)
+						# #STDERR.puts $nodes
+						# cost_string = ""
+						# return_node = message_info[1]
+						#
+						# STDERR.puts "return: " + return_node
+						# STDERR.puts $nodes
+						# #STDERR.puts "socket: " + $nodes[return_node] ["SOCKET"]
+						#
+						# STDERR.puts "Received COST request in " + $hostname + " from " + return_node
+						# # return cost to all other nodes that are not the hostname
+						# $nodes.keys.each do |node|
+						# 	if node != $hostname
+						# 		cost_string += node + "," + $nodes[node]["COST"].to_s + " "
+						# 	end
+						# end
+						#
+						# #cost_string += "\000"
+						# STDERR.puts "cost_string_sent: " + cost_string
+						# client.write(cost_string.chomp + " \0")
+						# STDERR.puts "Writing cost_string to socket"
+					when "LSP"
+						STDERR.puts "In LSP for " + $hostname
 
-						#save destination socket so that you can send messages through here later
-						$nodes[node_name]["SOCKET"] = dst_socket
+						#STDERR.puts "message_info: " + message_info
+						#info = message_info.chomp.strip.split(" ")
+						id = message_info[1]
+						seqnum = message_info[2].to_i
+						cost_string = message_info[3]
+						ttl = message_info[4].to_i
+						# return_path = info[4]
 
-						#STDERR.puts $nodes
-						STDERR.puts "Leaving EDGEB at " + $hostname
-						#STDERR.puts $nodes
+						STDERR.puts "\"" + message + "\""
+						STDERR.puts "\"" + id + "\""
+						STDERR.puts "\"" + seqnum.to_s + "\""
+						STDERR.puts "\"" + cost_string + "\""
+						STDERR.puts "\"" + ttl.to_s + "\""
+						#STDERR.puts "\"" + return_path + "\""
+
+						STDERR.puts "Passing LSP to all neighbors"
+						$nodes.keys.each do |node|
+							STDERR.puts node
+							STDERR.puts $nodes[node]["SOCKET"]
+							if node != id && $nodes[node]["SOCKET"] != nil
+								STDERR.puts "LSP from " + id + " sent to " + node
+
+								socket = $nodes[node]["SOCKET"]
+								socket.write(message)
+							end
+						end
+
+
+
+						if seqnum > $lsp[id]["NUM"]
+							STDERR.puts "Replacing LSP for " + id + " at " + $hostname
+							$lsp[id]["NUM"] = seqnum
+							$lsp[id]["TTL"] = ttl
+
+							neighbors = cost_string.chomp.strip.split(":")
+							neighbors.each do |n|
+								STDERR.puts "n: \"" + n + "\""
+
+								node_cost = n.split(",")
+								node_neighbor = node_cost[0]
+								cost_neighbor = node_cost[1].to_i
+
+								#STDERR.puts "neighbor: " + node_neighbor
+								#STDERR.puts "cost: " + cost_neighbor.to_s
+
+								$lsp[id]["COST"][node_neighbor] = cost_neighbor
+							end
+						end
+
+
+
+						 STDERR.puts $lsp
+
+						 status()
+						#
+						#
+						#
+						# $nodes.keys.each do |node|
+						# 	STDERR.puts id
+						# 	STDERR.puts $nodes[node]["SOCKET"]
+						# 	if node != id && $nodes[node]["SOCKET"] != nil
+						# 		STDERR.puts "COST sent to " + node
+						#
+						# 		socket = $nodes[node]["SOCKET"]
+						# 		socket.write("COST \0")
+						# 	end
+						# end
+
+						# STDERR.puts "cost_string: " + cost_string
+						#
+						# return_path += $hostname + ","
+						# STDERR.puts "new_return: " + return_path
+						#
+						# # lsp = id sequencenum cost_string TTL return_path
+						# lsp_string = $hostname + " " + $sequencenum.to_s + " " + cost_string.chomp(":") + " " + ttl.to_s + " " + return_path
+						#
+						# $sequencenum = $sequencenum + 1
+						#
+						# #cost_string += "\000"
+						# STDERR.puts "lsp_string_sent: " + lsp_string
+						# socket.write(lsp_string.chomp + " \0")
+						# STDERR.puts "Writing lsp_string to socket"
+						#
+						# $nodes.keys.each do |node|
+						#     if $nodes[node]["COST"] > 0 && node !=
+						# 		socket = $nodes[node]["SOCKET"]
+						# 		socket.write("LSP #{$hostname},#{return_path} \0")
+						# 	end
+						#  	end
+
+						STDERR.puts "Flood"
+					when "TEST"
+						STDERR.puts message
+						socket.write("Yes it is \0")
 					end
 				end
-				client.flush
-	        else
-	            # Perform a blocking-read until new-line is encountered.
-	            # We know the client is writing, so as long as it adheres to the
-	            # new-line protocol, we shouldn't block for very long.
-	            STDERR.puts "Reading..."
-	            message = socket.gets("\0")
-				message = message.chomp
-				message_info = message.split(' ')
-
-				message_type = message_info[0]
-
-				#STDERR.puts message
-				#STDERR.puts message_info
-
-				case message_type
-				# for this option a client is requesting that we return info about the cost to our neighbors
-				when "COST"
-					STDERR.puts "In COST for " + $hostname
-
-					status()
-					STDERR.puts "Entered status()"
-
-					# #STDERR.puts $nodes
-					# cost_string = ""
-					# return_node = message_info[1]
-					#
-					# STDERR.puts "return: " + return_node
-					# STDERR.puts $nodes
-					# #STDERR.puts "socket: " + $nodes[return_node] ["SOCKET"]
-					#
-					# STDERR.puts "Received COST request in " + $hostname + " from " + return_node
-					# # return cost to all other nodes that are not the hostname
-					# $nodes.keys.each do |node|
-					# 	if node != $hostname
-					# 		cost_string += node + "," + $nodes[node]["COST"].to_s + " "
-					# 	end
-					# end
-					#
-					# #cost_string += "\000"
-					# STDERR.puts "cost_string_sent: " + cost_string
-					# client.write(cost_string.chomp + " \0")
-					# STDERR.puts "Writing cost_string to socket"
-				when "LSP"
-					STDERR.puts "In LSP for " + $hostname
-
-					#STDERR.puts "message_info: " + message_info
-					#info = message_info.chomp.strip.split(" ")
-					id = message_info[1]
-					seqnum = message_info[2].to_i
-					cost_string = message_info[3]
-					ttl = message_info[4].to_i
-					# return_path = info[4]
-
-					STDERR.puts "\"" + message + "\""
-					STDERR.puts "\"" + id + "\""
-					STDERR.puts "\"" + seqnum.to_s + "\""
-					STDERR.puts "\"" + cost_string + "\""
-					STDERR.puts "\"" + ttl.to_s + "\""
-					#STDERR.puts "\"" + return_path + "\""
-
-					STDERR.puts "Passing LSP to all neighbors"
-					$nodes.keys.each do |node|
-						STDERR.puts node
-						STDERR.puts $nodes[node]["SOCKET"]
-						if node != id && $nodes[node]["SOCKET"] != nil
-							STDERR.puts "LSP from " + id + " sent to " + node
-
-							socket = $nodes[node]["SOCKET"]
-							socket.write(message)
-						end
-					end
-
-
-
-					if seqnum > $lsp[id]["NUM"]
-						STDERR.puts "Replacing LSP for " + id + " at " + $hostname
-						$lsp[id]["NUM"] = seqnum
-						$lsp[id]["TTL"] = ttl
-
-						neighbors = cost_string.chomp.strip.split(":")
-						neighbors.each do |n|
-							STDERR.puts "n: \"" + n + "\""
-
-							node_cost = n.split(",")
-							node_neighbor = node_cost[0]
-							cost_neighbor = node_cost[1].to_i
-
-							#STDERR.puts "neighbor: " + node_neighbor
-							#STDERR.puts "cost: " + cost_neighbor.to_s
-
-							$lsp[id]["COST"][node_neighbor] = cost_neighbor
-						end
-					end
-
-
-
-					 STDERR.puts $lsp
-
-					 status()
-					#
-					#
-					#
-					# $nodes.keys.each do |node|
-					# 	STDERR.puts id
-					# 	STDERR.puts $nodes[node]["SOCKET"]
-					# 	if node != id && $nodes[node]["SOCKET"] != nil
-					# 		STDERR.puts "COST sent to " + node
-					#
-					# 		socket = $nodes[node]["SOCKET"]
-					# 		socket.write("COST \0")
-					# 	end
-					# end
-
-					# STDERR.puts "cost_string: " + cost_string
-					#
-					# return_path += $hostname + ","
-					# STDERR.puts "new_return: " + return_path
-					#
-					# # lsp = id sequencenum cost_string TTL return_path
-					# lsp_string = $hostname + " " + $sequencenum.to_s + " " + cost_string.chomp(":") + " " + ttl.to_s + " " + return_path
-					#
-					# $sequencenum = $sequencenum + 1
-					#
-					# #cost_string += "\000"
-					# STDERR.puts "lsp_string_sent: " + lsp_string
-					# socket.write(lsp_string.chomp + " \0")
-					# STDERR.puts "Writing lsp_string to socket"
-					#
-					# $nodes.keys.each do |node|
-					#     if $nodes[node]["COST"] > 0 && node !=
-					# 		socket = $nodes[node]["SOCKET"]
-					# 		socket.write("LSP #{$hostname},#{return_path} \0")
-					# 	end
-					#  	end
-
-					STDERR.puts "Flood"
-				end
-	    	end
+			end
 		end
 	end
 end
@@ -233,6 +237,9 @@ def edgeb(cmd)
 	#save destination socket so that you can send messages through here later
 	$nodes[dst_name]["SOCKET"] = dst_socket
 	STDERR.puts "Client EDGEB complete at " + $hostname
+	$nodes[dst_name]["SOCKET"].write("TEST Is connection between client and server alive at EDGEB for Node "+$hostname+"? \0")
+	cost_string = $nodes[dst_name]["SOCKET"].gets("\0")
+	STDERR.puts cost_string
 end
 
 def dumptable(cmd)
@@ -325,10 +332,8 @@ def dijkstras(source)
 end
 =begin
 def status1()
-
 	stack = [$hostname]
 	visited = []
-
 	STDERR.puts $nodes
 	# perform DFS to find all possible routes
 	while !stack.empty?
@@ -342,35 +347,27 @@ def status1()
 					socket = $nodes[current_node]["SOCKET"]
 					#STDERR.puts "IP: " + $nodes[current_node]["IP"]
 					#STDERR.puts "PORT: " + $nodes[current_node]["PORT"].to_s
-
 					#socket = TCPSocket.new($nodes[current_node]["IP"], $nodes[current_node]["PORT"])
 					#socket.send("COST #{$hostname}\000", 0)
 					socket.write("COST #{$hostname} \0")
 					# socket.puts("COST #{$hostname}")
 					#socket.send("COST #{$hostname} \000", 0)
-
-
 					STDERR.puts "COST message sent to " + current_node
-
 					# gets/recv/read do not seem to be reading the string back from the socket after using write
 					cost_string = socket.gets("\0")
 					#cost_string = socket.read()
 					#cost_string = socket.recv_nonblock($maxPayload)
 					#cost_string = socket.recv(16)
 					socket.flush
-
 					# code does not reach this point
 					STDERR.puts "cost_string_recv: \"" + cost_string + "\""
-
 					STDERR.puts "Parsing cost_string"
 					neighbors = cost_string.chomp.strip.split(" ")
 					neighbors.each do |n|
 						STDERR.puts "n: \"" + n + "\""
-
 						node_cost = n.split(",")
 						node_neighbor = node_cost[0]
 						cost_neighbor = node_cost[1].to_i
-
 						# STDERR.puts "neighbor: " + node_neighbor
 						# STDERR.puts "cost: " + cost_neighbor.to_s
 						# STDERR.puts node_neighbor.length > 0
@@ -403,6 +400,7 @@ def status1()
 	end
 end
 =end
+
 
 def status()
 
