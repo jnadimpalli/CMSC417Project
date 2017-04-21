@@ -95,7 +95,7 @@ def run_server
 					#
 					# STDERR.puts "return: " + return_node
 					# STDERR.puts $nodes
-					# #STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
+					# #STDERR.puts "socket: " + $nodes[return_node] ["SOCKET"]
 					#
 					# STDERR.puts "Received COST request in " + $hostname + " from " + return_node
 					# # return cost to all other nodes that are not the hostname
@@ -111,52 +111,74 @@ def run_server
 					# STDERR.puts "Writing cost_string to socket"
 				when "LSP"
 					STDERR.puts "In LSP for " + $hostname
+
 					#STDERR.puts "message_info: " + message_info
 					#info = message_info.chomp.strip.split(" ")
 					id = message_info[1]
-					seqnum = message_info[2]
+					seqnum = message_info[2].to_i
 					cost_string = message_info[3]
-					ttl = message_info[4]
+					ttl = message_info[4].to_i
 					# return_path = info[4]
 
+					STDERR.puts "\"" + message + "\""
 					STDERR.puts "\"" + id + "\""
 					STDERR.puts "\"" + seqnum.to_s + "\""
 					STDERR.puts "\"" + cost_string + "\""
 					STDERR.puts "\"" + ttl.to_s + "\""
 					#STDERR.puts "\"" + return_path + "\""
 
-					$lsp[id]["NUM"] = seqnum
-					$lsp[id]["TTL"] = ttl
-
-					neighbors = cost_string.chomp.strip.split(":")
-					neighbors.each do |n|
-						STDERR.puts "n: \"" + n + "\""
-
-						node_cost = n.split(",")
-						node_neighbor = node_cost[0]
-						cost_neighbor = node_cost[1].to_i
-
-						#STDERR.puts "neighbor: " + node_neighbor
-						#STDERR.puts "cost: " + cost_neighbor.to_s
-
-						$lsp[id]["COST"][node_neighbor] = cost_neighbor
-					end
-
-					# STDERR.puts $lsp
-
-
-
-
+					STDERR.puts "Passing LSP to all neighbors"
 					$nodes.keys.each do |node|
-						STDERR.puts id
+						STDERR.puts node
 						STDERR.puts $nodes[node]["SOCKET"]
 						if node != id && $nodes[node]["SOCKET"] != nil
-							STDERR.puts "COST sent to " + node
+							STDERR.puts "LSP from " + id + " sent to " + node
 
 							socket = $nodes[node]["SOCKET"]
-							socket.write("COST \0")
+							socket.write(message)
 						end
 					end
+
+
+
+					if seqnum > $lsp[id]["NUM"]
+						STDERR.puts "Replacing LSP for " + id + " at " + $hostname
+						$lsp[id]["NUM"] = seqnum
+						$lsp[id]["TTL"] = ttl
+
+						neighbors = cost_string.chomp.strip.split(":")
+						neighbors.each do |n|
+							STDERR.puts "n: \"" + n + "\""
+
+							node_cost = n.split(",")
+							node_neighbor = node_cost[0]
+							cost_neighbor = node_cost[1].to_i
+
+							#STDERR.puts "neighbor: " + node_neighbor
+							#STDERR.puts "cost: " + cost_neighbor.to_s
+
+							$lsp[id]["COST"][node_neighbor] = cost_neighbor
+						end
+					end
+
+
+
+					 STDERR.puts $lsp
+
+					 status()
+					#
+					#
+					#
+					# $nodes.keys.each do |node|
+					# 	STDERR.puts id
+					# 	STDERR.puts $nodes[node]["SOCKET"]
+					# 	if node != id && $nodes[node]["SOCKET"] != nil
+					# 		STDERR.puts "COST sent to " + node
+					#
+					# 		socket = $nodes[node]["SOCKET"]
+					# 		socket.write("COST \0")
+					# 	end
+					# end
 
 					# STDERR.puts "cost_string: " + cost_string
 					#
@@ -264,7 +286,8 @@ def dijkstras(source)
 	unvisited = []
 	distance = []
 	previous = []
-	min = Float::INFINITY
+	min_value = Float::INFINITY
+	min_node = nil
 
 	$nodes.keys.each do |node|
 		distance[node] = Float::INFINITY
@@ -281,19 +304,22 @@ def dijkstras(source)
 			end
 		end
 
-		$distance.keys.each do |node|
-			if $istance[node] = min
-				unvisited.delete(node)
-				$nodes.keys.each do |neighbor|
-					if $nodes[neighbor]["COST"] > 0
-						temp = distance[node] + $nodes[neighbor]["COST"]
-						if temp < distance[node]
-							distance[neighbor] = temp
-							prev[neighbor] = node
-						end
-					end
-				end
+		distance.keys.each do |node|
+			if distance[node] = min
+				min_node = node
+				unvisited.delete(min_node)
 			end
+		end
+
+		$lsp.keys.each do |neighbor|
+			STDERR.puts neighbor
+			# if $nodes[neighbor]["COST"] > 0
+			# 	temp = distance[node] + $nodes[neighbor]["COST"]
+			# 	if temp < distance[node]
+			# 		distance[neighbor] = temp
+			# 		prev[neighbor] = node
+			# 	end
+			# end
 		end
 	end
 end
@@ -417,7 +443,23 @@ def status()
 
 					# lsp = id sequencenum cost_string TTL return_path
 					lsp_string = $hostname + " " + $sequencenum.to_s + " " + cost_string.chomp(":") + " " + ttl.to_s
+					$lsp[$hostname]["NUM"] = $sequencenum
+					$lsp[$hostname]["TTL"] = ttl
+					neighbors = cost_string.chomp.strip.split(":")
+					neighbors.each do |n|
+						STDERR.puts "n: \"" + n + "\""
 
+						node_cost = n.split(",")
+						node_neighbor = node_cost[0]
+						cost_neighbor = node_cost[1].to_i
+
+						#STDERR.puts "neighbor: " + node_neighbor
+						#STDERR.puts "cost: " + cost_neighbor.to_s
+
+						$lsp[$hostname]["COST"][node_neighbor] = cost_neighbor
+					end
+
+					STDERR.puts $lsp
 					$sequencenum = $sequencenum + 1
 
 					STDERR.puts lsp_string
@@ -426,6 +468,8 @@ def status()
 					#socket = TCPSocket.new($nodes[current_node]["IP"], $nodes[current_node]["PORT"])
 					socket.write("LSP #{lsp_string} \0")
 					STDERR.puts "LSP message sent to " + current_node
+
+					dijkstras($hostname)
 					#
 					# # gets/recv/read do not seem to be reading the string back from the socket after using write
 					# lsp_string = socket.gets("\0")
