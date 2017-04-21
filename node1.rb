@@ -7,6 +7,7 @@ $server = nil
 
 $nodes = {}
 $lsp = {}
+$table = {}
 $sequencenum = 1
 
 $updateInterval = nil
@@ -109,11 +110,13 @@ def run_server
 					ttl = 60
 					return_path = message_info[1]
 
-					STDERR.puts "return: " + return_path
-					STDERR.puts $nodes
+					STDERR.puts "return_path: " + return_path
 					#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
 
-					STDERR.puts "Received LSP request in " + $hostname + " from " + return_path
+					STDERR.puts "Received LSP request in " + $hostname + " from " + return_path.chomp(",")
+					#return_nodes = return_path.split(",").chomp(",")
+					#return_nodes = return_path.chomp(",").split(",")
+					#STDERR.puts "return_nodes: " + return_nodes
 					# return cost to all other nodes that are not the hostname
 
 					$nodes.keys.each do |node|
@@ -124,14 +127,27 @@ def run_server
 
 					STDERR.puts "cost_string: " + cost_string
 
-					lsp_string = $sequencenum.to_s + " " + cost_string.chomp(":") + " " + ttl.to_s + " " + return_path
+					return_path += $hostname + ","
+					STDERR.puts "new_return: " + return_path
+
+					# lsp = id sequencenum cost_string TTL return_path
+					lsp_string = $hostname + " " + $sequencenum.to_s + " " + cost_string.chomp(":") + " " + ttl.to_s + " " + return_path
 
 					$sequencenum = $sequencenum + 1
 
 					#cost_string += "\000"
 					STDERR.puts "lsp_string_sent: " + lsp_string
-					client.write(lsp_string.chomp + " \0")
+					socket.write(lsp_string.chomp + " \0")
 					STDERR.puts "Writing lsp_string to socket"
+
+					$nodes.keys.each do |node|
+					    if $nodes[node]["COST"] > 0 && node !=
+							socket = $nodes[node]["SOCKET"]
+							socket.write("LSP #{$hostname},#{return_path} \0")
+						end
+				  	end
+
+					STDERR.puts "Flood"
 				end
 	    	end
 		end
@@ -248,7 +264,7 @@ def dijkstras(source)
 		end
 	end
 end
-
+=begin
 def status1()
 
 	stack = [$hostname]
@@ -265,8 +281,8 @@ def status1()
 			if current_node != $hostname
 				if $nodes[current_node]["SOCKET"] != nil
 					socket = $nodes[current_node]["SOCKET"]
-					STDERR.puts "IP: " + $nodes[current_node]["IP"]
-					STDERR.puts "PORT: " + $nodes[current_node]["PORT"].to_s
+					#STDERR.puts "IP: " + $nodes[current_node]["IP"]
+					#STDERR.puts "PORT: " + $nodes[current_node]["PORT"].to_s
 
 					#socket = TCPSocket.new($nodes[current_node]["IP"], $nodes[current_node]["PORT"])
 					#socket.send("COST #{$hostname}\000", 0)
@@ -327,6 +343,7 @@ def status1()
 		STDERR.puts $nodes
 	end
 end
+=end
 
 def status()
 
@@ -342,7 +359,7 @@ def status()
 				if $nodes[current_node]["SOCKET"] != nil
 					socket = $nodes[current_node]["SOCKET"]
 					#socket = TCPSocket.new($nodes[current_node]["IP"], $nodes[current_node]["PORT"])
-					socket.write("LSP #{$hostname} \0")
+					socket.write("LSP #{$hostname}, \0")
 					STDERR.puts "LSP message sent to " + current_node
 
 					# gets/recv/read do not seem to be reading the string back from the socket after using write
@@ -356,32 +373,52 @@ def status()
 					STDERR.puts "lsp_string_recv: \"" + lsp_string + "\""
 
 					STDERR.puts "Parsing lsp_string"
-					neighbors = lsp_string.chomp.strip.split(" ")
-					neighbors.each do |n|
-						STDERR.puts "n: \"" + n + "\""
+					info = lsp_string.chomp.strip.split(" ")
+					id = info[0]
+					seqnum = info[1]
+					cost_string = info[2]
+					ttl = info[3]
+					return_path = info[4]
 
+					STDERR.puts "\"" + id + "\""
+					STDERR.puts "\"" + seqnum.to_s + "\""
+					STDERR.puts "\"" + cost_string + "\""
+					STDERR.puts "\"" + ttl.to_s + "\""
+					STDERR.puts "\"" + return_path + "\""
+
+					$lsp[id]["NUM"] = seqnum
+					$lsp[id]["TTL"] = ttl
+
+					neighbors = cost_string.chomp.split(":")
+					STDERR.puts neighbors
+					neighbors.each do |n|
 						node_cost = n.split(",")
 						node_neighbor = node_cost[0]
 						cost_neighbor = node_cost[1].to_i
-
-						# STDERR.puts "neighbor: " + node_neighbor
-						# STDERR.puts "cost: " + cost_neighbor.to_s
-						# STDERR.puts node_neighbor.length > 0
-						# STDERR.puts node_neighbor.length > 1
-						# add children of current_node to stack for processing
-						stack.push(node_neighbor)
-						# if route was previously unreachable (-1) or if new route has lower cost, update cost in host's routing table
-						STDERR.puts "current: " + current_node
-						if (cost_neighbor != -1)
-							if ($nodes[node_neighbor]["COST"] == -1) || ($nodes[node_neighbor]["COST"] > ($nodes[current_node]["COST"] + cost_neighbor))
-								$nodes[node_neighbor]["COST"] = $nodes[current_node]["COST"] + cost_neighbor
-								STDERR.puts "Updated value for " + node_neighbor + " in " + $hostname
-								STDERR.puts "Previous cost: " + $nodes[current_node]["COST"].to_s
-								STDERR.puts "Cost to add: " + cost_neighbor.to_s
-								STDERR.puts "New cost: " + ($nodes[current_node]["COST"] + cost_neighbor).to_s
-							end
-						end
+						$lsp[id]["COST"][node_neighbor] = nil
+						$lsp[id]["COST"][node_neighbor] = cost_neighbor
 					end
+
+					STDERR.puts $lsp
+
+					# 	# STDERR.puts "neighbor: " + node_neighbor
+					# 	# STDERR.puts "cost: " + cost_neighbor.to_s
+					# 	# STDERR.puts node_neighbor.length > 0
+					# 	# STDERR.puts node_neighbor.length > 1
+					# 	# add children of current_node to stack for processing
+					# 	stack.push(node_neighbor)
+					# 	# if route was previously unreachable (-1) or if new route has lower cost, update cost in host's routing table
+					# 	STDERR.puts "current: " + current_node
+					# 	if (cost_neighbor != -1)
+					# 		if ($nodes[node_neighbor]["COST"] == -1) || ($nodes[node_neighbor]["COST"] > ($nodes[current_node]["COST"] + cost_neighbor))
+					# 			$nodes[node_neighbor]["COST"] = $nodes[current_node]["COST"] + cost_neighbor
+					# 			STDERR.puts "Updated value for " + node_neighbor + " in " + $hostname
+					# 			STDERR.puts "Previous cost: " + $nodes[current_node]["COST"].to_s
+					# 			STDERR.puts "Cost to add: " + cost_neighbor.to_s
+					# 			STDERR.puts "New cost: " + ($nodes[current_node]["COST"] + cost_neighbor).to_s
+					# 		end
+					# 	end
+					# end
 				end
 			else
 				# if current_node is the host, just add children since routing table is already available
@@ -494,15 +531,19 @@ def setup(hostname, port, nodes, config)
 		end
 
 		$lsp[node_name] = {}
-		$lsp[node_name]["COST"] = ""
-		if node_name == $hostname
-			$lsp[node_name]["COST"] = nil
-		end
-		$lsp[node_name]["TTL"] = -1
 		$lsp[node_name]["NUM"] = -1
+		$lsp[node_name]["TTL"] = -1
+		$lsp[node_name]["COST"] = Hash.new
+
+		$table[node_name] = {}
+		$table[node_name]["NEXT"] = nil
+		$table[node_name]["COST"] = -1
+		if node_name == $hostname
+			$table[node_name]["COST"] = 0
+		end
 	end
 
-	#STDERR.puts $lsp
+	#STDERR.puts $table
 
 	#keep track of config variables
 	fHandle = File.open(config)
