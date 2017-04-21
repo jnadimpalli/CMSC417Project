@@ -78,74 +78,107 @@ def run_server
 
 				message_type = message_info[0]
 
+				#STDERR.puts message
+				#STDERR.puts message_info
+
 				case message_type
 				# for this option a client is requesting that we return info about the cost to our neighbors
 				when "COST"
 					STDERR.puts "In COST for " + $hostname
-					#STDERR.puts $nodes
-					cost_string = ""
-					return_node = message_info[1]
 
-					STDERR.puts "return: " + return_node
-					STDERR.puts $nodes
-					#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
+					status()
+					STDERR.puts "Entered status()"
 
-					STDERR.puts "Received COST request in " + $hostname + " from " + return_node
-					# return cost to all other nodes that are not the hostname
-					$nodes.keys.each do |node|
-						if node != $hostname
-							cost_string += node + "," + $nodes[node]["COST"].to_s + " "
-						end
-					end
-
-					#cost_string += "\000"
-					STDERR.puts "cost_string_sent: " + cost_string
-					client.write(cost_string.chomp + " \0")
-					STDERR.puts "Writing cost_string to socket"
+					# #STDERR.puts $nodes
+					# cost_string = ""
+					# return_node = message_info[1]
+					#
+					# STDERR.puts "return: " + return_node
+					# STDERR.puts $nodes
+					# #STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
+					#
+					# STDERR.puts "Received COST request in " + $hostname + " from " + return_node
+					# # return cost to all other nodes that are not the hostname
+					# $nodes.keys.each do |node|
+					# 	if node != $hostname
+					# 		cost_string += node + "," + $nodes[node]["COST"].to_s + " "
+					# 	end
+					# end
+					#
+					# #cost_string += "\000"
+					# STDERR.puts "cost_string_sent: " + cost_string
+					# client.write(cost_string.chomp + " \0")
+					# STDERR.puts "Writing cost_string to socket"
 				when "LSP"
 					STDERR.puts "In LSP for " + $hostname
-					#STDERR.puts $nodes
-					cost_string = ""
-					lsp_string = ""
-					ttl = 60
-					return_path = message_info[1]
+					#STDERR.puts "message_info: " + message_info
+					#info = message_info.chomp.strip.split(" ")
+					id = message_info[1]
+					seqnum = message_info[2]
+					cost_string = message_info[3]
+					ttl = message_info[4]
+					# return_path = info[4]
 
-					STDERR.puts "return_path: " + return_path
-					#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
+					STDERR.puts "\"" + id + "\""
+					STDERR.puts "\"" + seqnum.to_s + "\""
+					STDERR.puts "\"" + cost_string + "\""
+					STDERR.puts "\"" + ttl.to_s + "\""
+					#STDERR.puts "\"" + return_path + "\""
 
-					STDERR.puts "Received LSP request in " + $hostname + " from " + return_path.chomp(",")
-					#return_nodes = return_path.split(",").chomp(",")
-					#return_nodes = return_path.chomp(",").split(",")
-					#STDERR.puts "return_nodes: " + return_nodes
-					# return cost to all other nodes that are not the hostname
+					$lsp[id]["NUM"] = seqnum
+					$lsp[id]["TTL"] = ttl
+
+					neighbors = cost_string.chomp.strip.split(":")
+					neighbors.each do |n|
+						STDERR.puts "n: \"" + n + "\""
+
+						node_cost = n.split(",")
+						node_neighbor = node_cost[0]
+						cost_neighbor = node_cost[1].to_i
+
+						#STDERR.puts "neighbor: " + node_neighbor
+						#STDERR.puts "cost: " + cost_neighbor.to_s
+
+						$lsp[id]["COST"][node_neighbor] = cost_neighbor
+					end
+
+					# STDERR.puts $lsp
+
+
+
 
 					$nodes.keys.each do |node|
-						if node != $hostname
-							cost_string += node + "," + $nodes[node]["COST"].to_s + ":"
+						STDERR.puts id
+						STDERR.puts $nodes[node]["SOCKET"]
+						if node != id && $nodes[node]["SOCKET"] != nil
+							STDERR.puts "COST sent to " + node
+
+							socket = $nodes[node]["SOCKET"]
+							socket.write("COST \0")
 						end
 					end
 
-					STDERR.puts "cost_string: " + cost_string
-
-					return_path += $hostname + ","
-					STDERR.puts "new_return: " + return_path
-
-					# lsp = id sequencenum cost_string TTL return_path
-					lsp_string = $hostname + " " + $sequencenum.to_s + " " + cost_string.chomp(":") + " " + ttl.to_s + " " + return_path
-
-					$sequencenum = $sequencenum + 1
-
-					#cost_string += "\000"
-					STDERR.puts "lsp_string_sent: " + lsp_string
-					socket.write(lsp_string.chomp + " \0")
-					STDERR.puts "Writing lsp_string to socket"
-
-					$nodes.keys.each do |node|
-					    if $nodes[node]["COST"] > 0 && node !=
-							socket = $nodes[node]["SOCKET"]
-							socket.write("LSP #{$hostname},#{return_path} \0")
-						end
-				  	end
+					# STDERR.puts "cost_string: " + cost_string
+					#
+					# return_path += $hostname + ","
+					# STDERR.puts "new_return: " + return_path
+					#
+					# # lsp = id sequencenum cost_string TTL return_path
+					# lsp_string = $hostname + " " + $sequencenum.to_s + " " + cost_string.chomp(":") + " " + ttl.to_s + " " + return_path
+					#
+					# $sequencenum = $sequencenum + 1
+					#
+					# #cost_string += "\000"
+					# STDERR.puts "lsp_string_sent: " + lsp_string
+					# socket.write(lsp_string.chomp + " \0")
+					# STDERR.puts "Writing lsp_string to socket"
+					#
+					# $nodes.keys.each do |node|
+					#     if $nodes[node]["COST"] > 0 && node !=
+					# 		socket = $nodes[node]["SOCKET"]
+					# 		socket.write("LSP #{$hostname},#{return_path} \0")
+					# 	end
+					#  	end
 
 					STDERR.puts "Flood"
 				end
@@ -357,55 +390,87 @@ def status()
 			visited.push(current_node)
 			if current_node != $hostname
 				if $nodes[current_node]["SOCKET"] != nil
-					socket = $nodes[current_node]["SOCKET"]
-					#socket = TCPSocket.new($nodes[current_node]["IP"], $nodes[current_node]["PORT"])
-					socket.write("LSP #{$hostname}, \0")
-					STDERR.puts "LSP message sent to " + current_node
+					cost_string = ""
+					lsp_string = ""
+					ttl = 60
+					#return_path = message_info[1]
 
-					# gets/recv/read do not seem to be reading the string back from the socket after using write
-					lsp_string = socket.gets("\0")
-					#cost_string = socket.read()
-					#cost_string = socket.recv_nonblock($maxPayload)
-					#cost_string = socket.recv(16)
-					socket.flush
+					#STDERR.puts "return_path: " + return_path
+					#STDERR.puts "socket: " + $nodes[return_node]["SOCKET"]
 
-					# code does not reach this point
-					STDERR.puts "lsp_string_recv: \"" + lsp_string + "\""
+					#STDERR.puts "Received LSP request in " + $hostname + " from " + return_path.chomp(",")
+					#return_nodes = return_path.split(",").chomp(",")
+					#return_nodes = return_path.chomp(",").split(",")
+					#STDERR.puts "return_nodes: " + return_nodes
+					# return cost to all other nodes that are not the hostname
 
-					STDERR.puts "Parsing lsp_string"
-					info = lsp_string.chomp.strip.split(" ")
-					id = info[0]
-					seqnum = info[1]
-					cost_string = info[2]
-					ttl = info[3]
-					return_path = info[4]
-
-					STDERR.puts "\"" + id + "\""
-					STDERR.puts "\"" + seqnum.to_s + "\""
-					STDERR.puts "\"" + cost_string + "\""
-					STDERR.puts "\"" + ttl.to_s + "\""
-					STDERR.puts "\"" + return_path + "\""
-
-					$lsp[id]["NUM"] = seqnum
-					$lsp[id]["TTL"] = ttl
-
-					neighbors = cost_string.chomp.split(":")
-					STDERR.puts neighbors
-					neighbors.each do |n|
-						node_cost = n.split(",")
-						node_neighbor = node_cost[0]
-						cost_neighbor = node_cost[1].to_i
-						$lsp[id]["COST"][node_neighbor] = nil
-						$lsp[id]["COST"][node_neighbor] = cost_neighbor
+					$nodes.keys.each do |node|
+						if node != $hostname
+							cost_string += node + "," + $nodes[node]["COST"].to_s + ":"
+						end
 					end
 
-					STDERR.puts $lsp
+					STDERR.puts "cost_string: " + cost_string
+
+					#return_path += $hostname + ","
+					#STDERR.puts "new_return: " + return_path
+
+					# lsp = id sequencenum cost_string TTL return_path
+					lsp_string = $hostname + " " + $sequencenum.to_s + " " + cost_string.chomp(":") + " " + ttl.to_s
+
+					$sequencenum = $sequencenum + 1
+
+					STDERR.puts lsp_string
+
+					socket = $nodes[current_node]["SOCKET"]
+					#socket = TCPSocket.new($nodes[current_node]["IP"], $nodes[current_node]["PORT"])
+					socket.write("LSP #{lsp_string} \0")
+					STDERR.puts "LSP message sent to " + current_node
+					#
+					# # gets/recv/read do not seem to be reading the string back from the socket after using write
+					# lsp_string = socket.gets("\0")
+					# #cost_string = socket.read()
+					# #cost_string = socket.recv_nonblock($maxPayload)
+					# #cost_string = socket.recv(16)
+					# socket.flush
+					#
+					# # code does not reach this point
+					# STDERR.puts "lsp_string_recv: \"" + lsp_string + "\""
+					#
+					# STDERR.puts "Parsing lsp_string"
+					# info = lsp_string.chomp.strip.split(" ")
+					# id = info[0]
+					# seqnum = info[1]
+					# cost_string = info[2]
+					# ttl = info[3]
+					# return_path = info[4]
+					#
+					# STDERR.puts "\"" + id + "\""
+					# STDERR.puts "\"" + seqnum.to_s + "\""
+					# STDERR.puts "\"" + cost_string + "\""
+					# STDERR.puts "\"" + ttl.to_s + "\""
+					# STDERR.puts "\"" + return_path + "\""
+					#
+					# $lsp[id]["NUM"] = seqnum
+					# $lsp[id]["TTL"] = ttl
+					#
+					# neighbors = cost_string.chomp.split(":")
+					# STDERR.puts neighbors
+					# neighbors.each do |n|
+					# 	node_cost = n.split(",")
+					# 	node_neighbor = node_cost[0]
+					# 	cost_neighbor = node_cost[1].to_i
+					# 	$lsp[id]["COST"][node_neighbor] = nil
+					# 	$lsp[id]["COST"][node_neighbor] = cost_neighbor
+					# end
+					#
+					# STDERR.puts $lsp
 
 					# 	# STDERR.puts "neighbor: " + node_neighbor
 					# 	# STDERR.puts "cost: " + cost_neighbor.to_s
 					# 	# STDERR.puts node_neighbor.length > 0
 					# 	# STDERR.puts node_neighbor.length > 1
-					# 	# add children of current_node to stack for processing
+					 	# add children of current_node to stack for processing
 					# 	stack.push(node_neighbor)
 					# 	# if route was previously unreachable (-1) or if new route has lower cost, update cost in host's routing table
 					# 	STDERR.puts "current: " + current_node
