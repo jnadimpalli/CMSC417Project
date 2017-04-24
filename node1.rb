@@ -1,4 +1,5 @@
 require 'socket'
+require 'thread'
 
 $port = nil
 $hostname = nil
@@ -26,17 +27,22 @@ def run_server
 	#create array to keep track of sockets we can read from
 	reading = [$server]
 
+	mutex = Mutex.new
+
 	while true
 		results = IO.select(reading)
 
 		read = results[0]
 
-		listening_thread = Thread.new do
-			read.each do |socket|
+		read.each do |socket|
+			listening_thread = Thread.new do
 				if socket == $server
 					# A new client is connecting to server
 					client, addr_info = $server.accept_nonblock
-					reading.push(client)
+					
+					mutex.synchronize {
+						reading.push(client)
+					}
 
 					message = client.gets("\0")
 
@@ -339,7 +345,7 @@ def dumptable(cmd)
 	end
 
 	File.open(filename, "w") {|f|
-		f.write(dumptable_string.chomp)
+		f.write(dumptable_string)
 	}
 end
 
