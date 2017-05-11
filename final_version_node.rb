@@ -1057,9 +1057,11 @@ def setup(hostname, port, nodes, config)
 	end
 	
 	update_thread = Thread.new do
-		sleep $updateInterval
+		while true
+			sleep $updateInterval
 		
-		lsp()
+			lsp()
+		end
 	end
 
 	main()
